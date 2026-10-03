@@ -1,7 +1,7 @@
 # Apache Iceberg Tutorial - Complete Directory Structure
 
 ```
-iceberg-hands-on/
+iceberg-examples/
 ├── README.md                          # Main documentation
 ├── DIRECTORY.md                       # This file
 ├── docker-compose.yml                 # Service configuration (the whole stack)

@@ -27,7 +27,7 @@ This tutorial is designed for **complete beginners** with no prior data engineer
 ## 📚 Documentation Structure
 
 ```
-iceberg-hands-on/
+iceberg-examples/
 ├── README.md                          # This file
 ├── DIRECTORY.md                       # Directory structure overview
 ├── docker-compose.yml                 # Service configuration
