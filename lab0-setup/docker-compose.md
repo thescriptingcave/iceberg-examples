@@ -47,7 +47,7 @@ docker compose down -v
 | Garage S3 API | 3900 | http://localhost:3900 | generated at first boot, see `/creds/garage-credentials.env` |
 | PostgreSQL | 5432 | `localhost:5432` | `polaris` / `polaris` |
 
-The compose file also publishes Garage's WebDAV (4883) and admin API (9899) ports; the labs do not use them. There is no object-store web console and no Polaris admin UI.
+Garage publishes only its S3 API (3900); it is managed with the `garage` CLI, not an HTTP admin API. There is no object-store web console and no Polaris admin UI.
 
 ## 🐳 Docker Containers
 

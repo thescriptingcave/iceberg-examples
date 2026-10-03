@@ -222,6 +222,12 @@ spark = (
 The lab uses the `tutorial` namespace, created in Lab 0. If it is missing, run
 `spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.tutorial")`.
 
+> **Already ran `spark-init.sql` in Lab 0?** It creates `tutorial.customers`
+> with the same three rows, so Step 4 would insert them a second time (Iceberg
+> has no primary keys to stop it). Check with
+> `spark.sql("SHOW TABLES IN lakehouse.tutorial").show()` -- if `customers` is
+> listed, skip Steps 2 and 4.
+
 ### Step 2: Create an Iceberg Table
 
 ```python

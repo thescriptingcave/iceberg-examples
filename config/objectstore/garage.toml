@@ -19,14 +19,5 @@ s3_region = "us-east-1"
 api_bind_addr = "[::]:3900"
 root_domain = ".s3.garage.localhost"
 
-# WebDAV - handy for poking at files in a browser
-[s3_webdav]
-bind_addr = "[::]:4883"
-root_domain = ".webdav.garage.localhost"
-admin_bind_addr = "[::]:4890"
-
-# Admin API - used by the bootstrap script
-[admin]
-admin_bind_addr = "[::]:9899"
-metrics_token = "none"
-replication_factor_warning = 1
+# No WebDAV or admin HTTP API: Garage has no WebDAV server, and the bootstrap
+# container manages the node with the `garage` CLI over RPC (port 3901) above.

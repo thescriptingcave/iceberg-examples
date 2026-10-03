@@ -39,8 +39,6 @@ services:
     # `garage server` accepts no arguments.)
     ports:
       - "3900:3900"   # S3 API
-      - "4883:4883"   # WebDAV, handy for browsing files in a browser
-      - "9899:9899"   # admin API
     volumes:
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data

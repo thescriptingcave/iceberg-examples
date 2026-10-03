@@ -52,7 +52,7 @@ You should see output like:
 ```
 NAME                  SERVICE       STATUS                    PORTS
 iceberg-jupyter       jupyter       Up 4 minutes (healthy)    0.0.0.0:4040->4040/tcp, 0.0.0.0:8888->8888/tcp
-iceberg-objectstore   objectstore   Up 4 minutes              0.0.0.0:3900->3900/tcp, 0.0.0.0:4883->4883/tcp, 0.0.0.0:9899->9899/tcp
+iceberg-objectstore   objectstore   Up 4 minutes              0.0.0.0:3900->3900/tcp
 iceberg-polaris       polaris       Up 4 minutes (healthy)    0.0.0.0:8181->8181/tcp
 iceberg-postgres      postgres      Up 4 minutes (healthy)    0.0.0.0:5432->5432/tcp
 iceberg-trino         trino         Up 4 minutes (healthy)    0.0.0.0:8080->8080/tcp
