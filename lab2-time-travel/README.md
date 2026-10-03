@@ -141,20 +141,30 @@ SELECT * FROM lakehouse.tutorial.customers VERSION AS OF '{first_snapshot_id}'
 ### Method 2: Query by Timestamp
 
 ```python
-# Query as of a specific timestamp (Spark session time zone; UTC in this stack)
-spark.sql("""
+# Pick a moment to travel to. Here: the commit time of the first snapshot,
+# taken from the snapshots DataFrame above. Any later time works too.
+as_of = snapshots.first()["committed_at"]   # a Python datetime, UTC in this stack
+print(f"Travelling to {as_of}")
+
+# Query as of a timestamp string (interpreted in the Spark session time zone)
+spark.sql(f"""
 SELECT * FROM lakehouse.tutorial.customers
-TIMESTAMP AS OF '2026-10-03 05:21:13'
+TIMESTAMP AS OF '{as_of}'
 """).show()
 
-# Or using Spark timestamp functions (seconds since the epoch)
-spark.sql("""
+# Or using Spark timestamp functions (milliseconds since the epoch).
+# Keep the milliseconds: snapshot times are millisecond-precise, and rounding
+# down to whole seconds can land *before* the first snapshot, which fails with
+# "Cannot find a snapshot older than ...".
+as_of_millis = int(as_of.timestamp() * 1000)
+spark.sql(f"""
 SELECT * FROM lakehouse.tutorial.customers
-TIMESTAMP AS OF timestamp_seconds(1791004873)
+TIMESTAMP AS OF timestamp_millis({as_of_millis})
 """).show()
 ```
 
-Use a timestamp taken from the `committed_at` column of the snapshots table.
+Timestamps must come from your own table -- take them from the `committed_at`
+column of the snapshots table, as above.
 `TIMESTAMP AS OF` returns the snapshot that was current at that moment; if the
 timestamp is earlier than the table's first snapshot, the query fails with
 `Cannot find a snapshot older than ...`.
@@ -165,7 +175,7 @@ timestamp is earlier than the table's first snapshot, the query fails with
 # Read as of a timestamp with the DataFrame API (milliseconds since the epoch)
 df = spark.read \
     .format("iceberg") \
-    .option("as-of-timestamp", "1791004873000") \
+    .option("as-of-timestamp", str(as_of_millis)) \
     .load("lakehouse.tutorial.customers")
 
 df.show()
@@ -207,20 +217,26 @@ spark.sql("SELECT * FROM lakehouse.tutorial.customers.metadata_log_entries").sho
 Open the Trino CLI with `docker exec -it iceberg-trino trino`. In Trino the same
 table is `iceberg.tutorial.customers`.
 
+The examples below contain two placeholders. Fill them in from your own table
+(run the `$snapshots` query in Method 2 first):
+
+- `<committed_at>` -- a `committed_at` value, e.g. `2024-06-01 14:03:27.512 UTC`
+- `<snapshot_id>` -- a `snapshot_id` value, e.g. `5412419068185013755`
+
 ### Method 1: Query by Timestamp
 
 ```sql
 -- Query data as of a specific timestamp (the value must be a TIMESTAMP literal, not a string)
 SELECT * FROM iceberg.tutorial.customers
-FOR TIMESTAMP AS OF TIMESTAMP '2026-10-03 05:21:13 UTC';
+FOR TIMESTAMP AS OF TIMESTAMP '<committed_at>';
 
--- Without a time zone, the session time zone is used (UTC in this stack)
-SELECT * FROM iceberg.tutorial.customers
-FOR TIMESTAMP AS OF TIMESTAMP '2026-10-03 05:21:13';
+-- Without a time zone, the session time zone is used (UTC in this stack),
+-- e.g. TIMESTAMP '2024-06-01 14:03:27'
+
 ```
 
 Trino does not accept `FOR SYSTEM TIME AS OF`, and a plain string such as
-`FOR TIMESTAMP AS OF '2026-10-03 05:21:13'` is rejected -- use a `TIMESTAMP` literal.
+`FOR TIMESTAMP AS OF '2024-06-01 14:03:27'` is rejected -- use a `TIMESTAMP` literal.
 
 ### Method 2: Query by Snapshot ID
 
@@ -238,7 +254,7 @@ SELECT * FROM iceberg.tutorial."customers$history";
 
 -- Then query a snapshot by its ID
 SELECT * FROM iceberg.tutorial.customers
-FOR VERSION AS OF 495579447181732729;
+FOR VERSION AS OF <snapshot_id>;
 ```
 
 ### Method 3: Comparing Current vs Historical Data
@@ -249,13 +265,13 @@ SELECT * FROM iceberg.tutorial.customers;
 
 -- Get data as of a specific time
 SELECT * FROM iceberg.tutorial.customers
-FOR TIMESTAMP AS OF TIMESTAMP '2026-10-03 05:21:13 UTC';
+FOR TIMESTAMP AS OF TIMESTAMP '<committed_at>';
 
 -- Compare row counts
 SELECT
     (SELECT COUNT(*) FROM iceberg.tutorial.customers) AS current_count,
     (SELECT COUNT(*) FROM iceberg.tutorial.customers
-     FOR TIMESTAMP AS OF TIMESTAMP '2026-10-03 05:21:13 UTC') AS historical_count;
+     FOR TIMESTAMP AS OF TIMESTAMP '<committed_at>') AS historical_count;
 ```
 
 ### Method 4: Analyzing Changes Over Time
@@ -267,7 +283,7 @@ WITH current_data AS (
 ),
 historical_data AS (
     SELECT * FROM iceberg.tutorial.customers
-    FOR TIMESTAMP AS OF TIMESTAMP '2026-10-03 05:21:13 UTC'
+    FOR TIMESTAMP AS OF TIMESTAMP '<committed_at>'
 )
 SELECT
     'current' AS source,
@@ -411,15 +427,20 @@ spark.read \
     .writeTo("lakehouse.tutorial.customers_recovery") \
     .createOrReplace()
 
-# Option 3: Re-insert only the lost row, keeping any later changes
-# (use this instead of Option 1, not after it)
+# Option 3: Re-insert only the lost row, keeping any later changes.
+# This is an ALTERNATIVE to Option 1. Iceberg has no primary keys, so appending
+# a row that Option 1 already brought back would duplicate it -- hence the check.
 historical_data = spark.read \
     .format("iceberg") \
     .option("snapshot-id", last_good_snapshot) \
     .load("lakehouse.tutorial.customers")
 
 customer_to_restore = historical_data.filter(col("customer_id") == 1)
-customer_to_restore.writeTo("lakehouse.tutorial.customers").append()
+current = spark.table("lakehouse.tutorial.customers")
+if current.filter(col("customer_id") == 1).count() == 0:
+    customer_to_restore.writeTo("lakehouse.tutorial.customers").append()
+else:
+    print("Row already present (Option 1 restored it) -- nothing to re-insert")
 ```
 
 `rollback_to_timestamp('tutorial.customers', TIMESTAMP '...')` does the same
