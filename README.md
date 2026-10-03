@@ -27,7 +27,7 @@ This tutorial is designed for **complete beginners** with no prior data engineer
 ## 📚 Documentation Structure
 
 ```
-iceberg-examples/
+iceberg-hands-on/
 ├── README.md                          # This file
 ├── DIRECTORY.md                       # Directory structure overview
 ├── docker-compose.yml                 # Service configuration
@@ -83,9 +83,10 @@ iceberg-examples/
 
 ### Quick Start (5 minutes)
 
-1. **Go to the project directory** (wherever you cloned or unpacked it):
+1. **Get the project and go into it:**
 ```bash
-cd iceberg-examples
+git clone https://github.com/thescriptingcave/iceberg-hands-on.git
+cd iceberg-hands-on
 ```
 
 2. **Start all services and wait until they are ready:**

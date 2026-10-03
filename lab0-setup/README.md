@@ -29,10 +29,11 @@ Related files elsewhere in the repo:
 
 ### Step 1: Navigate to the project directory
 
-Wherever you cloned or unpacked it:
+If you have not cloned it yet:
 
 ```bash
-cd iceberg-examples
+git clone https://github.com/thescriptingcave/iceberg-hands-on.git
+cd iceberg-hands-on
 ```
 
 ### Step 2: Start all services
