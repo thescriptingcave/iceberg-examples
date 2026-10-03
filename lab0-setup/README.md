@@ -160,13 +160,39 @@ The labs keep their tables in the `tutorial` namespace (`lakehouse.tutorial.*` i
 2. In a notebook with the `SparkSession` from the [Connection Reference](../common/connection-reference.md#spark-in-a-jupyter-notebook), run:
 
    ```python
-   for stmt in open("/home/jovyan/notebooks/spark-init.sql").read().split(";"):
-       sql = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--")).strip()
-       if sql:
-           df = spark.sql(sql)
-           if df.columns:
-               df.show(truncate=False)
+   from pathlib import Path
+
+   sql_text = Path("spark-init.sql").read_text()
+
+   statements = [s.strip() for s in sql_text.split(";") if s.strip()]
+
+   for i, stmt in enumerate(statements, 1):
+       print(f"\n--- Statement {i} ---")
+       print(stmt)
+
+       result = spark.sql(stmt)
+
+       # Only display output for statements that return rows
+       if stmt.lstrip().upper().startswith(("SELECT", "SHOW")):
+           result.show(truncate=False)
    ```
+
+   JupyterLab opens in `notebooks/`, so the relative path `spark-init.sql` is
+   the copy you just made. If your kernel's working directory is somewhere
+   else, use the absolute path instead:
+   `Path("/home/jovyan/notebooks/spark-init.sql")`.
+
+   The loop echoes each statement before running it, so a failure names the
+   statement that caused it. Statements that do not return rows -- `CREATE
+   NAMESPACE`, `USE`, `CREATE TABLE`, `INSERT OVERWRITE` -- run silently.
+
+   Two consequences of splitting a commented file on `";"`:
+
+   - The comment header rides along with the statement that follows it, and
+     Spark accepts leading `--` lines, so this works. Never put a semicolon
+     *inside* a comment, though -- the split would cut a statement in half.
+   - A statement may begin with a comment line, so match on `lstrip()`ed text
+     only when checking for `SELECT`/`SHOW`, as above.
 
 The script is safe to run more than once: tables are created with `IF NOT EXISTS` and the sample rows are loaded with `INSERT OVERWRITE`. Check from Trino that both engines see the same tables:
 
