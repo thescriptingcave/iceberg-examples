@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+
+# Local overrides (copy from .env.example)
+.env

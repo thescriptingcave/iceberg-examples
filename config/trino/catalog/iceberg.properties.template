@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Trino catalog definition -- TEMPLATE.
+#
+# This file is a template because the object store's access key is generated at
+# first boot and is therefore not known in advance. `entrypoint.sh` substitutes
+# the ${...} placeholders and writes the real file to /etc/trino/catalog/.
+# Do not edit the rendered copy -- edit this one and restart Trino.
+# ---------------------------------------------------------------------------
+
+connector.name=iceberg
+
+# --- Talking to Polaris -----------------------------------------------------
+# Polaris serves the Iceberg REST catalog under the /api/catalog prefix, so the
+# base URI must include it. If you leave it off, Trino probes /v1/config,
+# Polaris answers 404, and Trino reports the unhelpful "Cannot obtain metadata".
+iceberg.catalog.type=rest
+iceberg.rest-catalog.uri=${POLARIS_URI}
+
+# This must be the NAME of a catalog registered in Polaris, not an S3 path.
+# Polaris answers 404 "Unable to find warehouse" if no such catalog exists.
+iceberg.rest-catalog.warehouse=${POLARIS_CATALOG}
+
+# Polaris speaks OAuth2 client-credentials. The root principal created by the
+# polaris-bootstrap container is `root`/`root` -- see POLARIS_CLIENT_ID /
+# POLARIS_CLIENT_SECRET in docker-compose.yml.
+#
+# Note the dots: these are `oauth2.server-uri`, not `oauth2-server-uri`.
+iceberg.rest-catalog.security=OAUTH2
+iceberg.rest-catalog.oauth2.server-uri=${POLARIS_TOKEN_URI}
+iceberg.rest-catalog.oauth2.credential=${POLARIS_CREDENTIAL}
+iceberg.rest-catalog.oauth2.scope=PRINCIPAL_ROLE:ALL
+
+# No realm header is set: Polaris routes requests without a Polaris-Realm header
+# to its default realm, POLARIS, which is the one polaris-bootstrap creates.
+# (Trino has no property for adding arbitrary HTTP headers to REST calls.)
+
+# Credential vending is OFF. Garage has no STS endpoint, so Polaris cannot mint
+# short-lived credentials (the catalog is created with stsUnavailable=true).
+# Trino reaches the object store with the static key from the creds volume.
+iceberg.rest-catalog.vended-credentials-enabled=false
+
+# --- Talking to the object store --------------------------------------------
+# Use Trino's native S3 client. (`fs.s3.enabled` is not a valid property; the
+# correct name is `fs.native-s3.enabled`.)
+fs.native-s3.enabled=true
+s3.endpoint=${S3_ENDPOINT}
+s3.region=${S3_REGION}
+s3.path-style-access=true
+s3.aws-access-key=${AWS_ACCESS_KEY_ID}
+s3.aws-secret-key=${AWS_SECRET_ACCESS_KEY}

@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+# One-shot bootstrap for the object store.
+#
+# The Garage server image is distroless -- it contains /garage and nothing else,
+# not even a shell. So we assemble a throwaway image that borrows the binary and
+# adds a shell to drive the setup commands.
+# ---------------------------------------------------------------------------
+FROM alpine:3.20
+
+RUN apk add --no-cache bash
+
+# The garage CLI itself, lifted straight out of the server image so there is no
+# download and no version skew between the two.
+COPY --from=dxflrs/garage:v2.1.0 /garage /usr/local/bin/garage
+
+COPY bootstrap.sh /usr/local/bin/bootstrap.sh
+COPY garage.toml   /etc/garage.toml
+
+RUN chmod +x /usr/local/bin/bootstrap.sh
+
+ENTRYPOINT ["/usr/local/bin/bootstrap.sh"]

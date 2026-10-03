@@ -1,0 +1,256 @@
+# =============================================================================
+# Apache Iceberg tutorial stack
+#
+# Three layers, each in its own container:
+#   storage  : Garage (S3-compatible object store)
+#   catalog  : Apache Polaris (Iceberg REST catalog)
+#   compute  : Spark (in JupyterLab) and Trino
+#
+# Every image tag below is pinned and was verified to publish an arm64 manifest,
+# so this runs natively on Apple Silicon as well as on x86 Linux.
+# =============================================================================
+
+name: iceberg-tutorial
+
+networks:
+  iceberg-network:
+    driver: bridge
+
+volumes:
+  # Garage keeps its cluster membership key in the metadata directory. The
+  # bootstrap container needs that same directory to authenticate, so it is a
+  # shared volume rather than something private to the object store.
+  garage-meta:
+  garage-data:
+  postgres-data:
+  # Written by the bootstrap container, read by Trino / Spark / Polaris.
+  garage-creds:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Layer 1: object storage
+  # ---------------------------------------------------------------------------
+  objectstore:
+    image: ${GARAGE_IMAGE:-dxflrs/garage:v2.1.0}
+    container_name: iceberg-objectstore
+    # No command override: the image's default is `/garage server`, which reads
+    # /etc/garage.toml -- exactly where the config is mounted below. (Note that
+    # `garage server` accepts no arguments.)
+    ports:
+      - "3900:3900"   # S3 API
+      - "4883:4883"   # WebDAV, handy for browsing files in a browser
+      - "9899:9899"   # admin API
+    volumes:
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+      - ./config/objectstore/garage.toml:/etc/garage.toml:ro
+    networks:
+      - iceberg-network
+    # No healthcheck: the Garage image is distroless and has no shell, so any
+    # exec-based probe would report permanently unhealthy. Readiness is
+    # established by the bootstrap container instead.
+
+  # One-shot container that turns a bare Garage node into a working bucket.
+  # Runs to completion on every `up` and is safe to repeat.
+  objectstore-bootstrap:
+    build:
+      context: ./config/objectstore
+      dockerfile: Dockerfile.bootstrap
+    image: iceberg-garage-bootstrap:local
+    container_name: iceberg-objectstore-bootstrap
+    depends_on:
+      - objectstore
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-warehouse}
+    volumes:
+      - garage-meta:/var/lib/garage/meta:ro
+      - garage-creds:/creds
+    networks:
+      - iceberg-network
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Layer 1b: Polaris' relational metadata store
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: iceberg-postgres
+    environment:
+      POSTGRES_USER: polaris
+      POSTGRES_PASSWORD: polaris
+      POSTGRES_DB: polaris
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Polaris ships its PostgreSQL DDL inside its own jar but has no migration
+      # runner, so the tables have to be created before Polaris starts. The
+      # postgres image executes anything in this directory on first start.
+      - ./config/polaris/postgres-schema.sql:/docker-entrypoint-initdb.d/10-polaris-schema.sql:ro
+    networks:
+      - iceberg-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polaris -d polaris"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ---------------------------------------------------------------------------
+  # Layer 2: the catalog
+  # ---------------------------------------------------------------------------
+  polaris:
+    image: ${POLARIS_IMAGE:-apache/polaris:1.8.0}
+    container_name: iceberg-polaris
+    depends_on:
+      postgres:
+        condition: service_healthy
+      objectstore-bootstrap:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "/opt/polaris-config/entrypoint.sh"]
+    ports:
+      - "8181:8181"
+    environment:
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/polaris
+      QUARKUS_DATASOURCE_USERNAME: polaris
+      QUARKUS_DATASOURCE_PASSWORD: polaris
+      QUARKUS_DB_KIND: postgresql
+      # Without this the server runs with in-memory persistence and forgets
+      # every catalog, table and role on restart. The database itself has no
+      # migration runner, which is what postgres-schema.sql above is for.
+      POLARIS_PERSISTENCE_TYPE: relational-jdbc
+      # Polaris 1.8 reads its tables from the schema named by this connection
+      # property. The image already defaults it to POLARIS_SCHEMA, which
+      # PostgreSQL folds to `polaris_schema` -- the schema that
+      # postgres-schema.sql creates. Stated explicitly so the two are visibly
+      # coupled rather than depending on an image default.
+      QUARKUS_DATASOURCE_JDBC_ADDITIONAL_JDBC_PROPERTIES_CURRENTSCHEMA: polaris_schema
+      # Polaris writes table metadata to the object store itself. Its access
+      # key (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) is generated by Garage on
+      # first boot, so entrypoint.sh loads it from the shared credentials volume
+      # written by objectstore-bootstrap -- it is deliberately not set here.
+      AWS_REGION: ${S3_REGION:-us-east-1}
+      # Where Polaris should look for the object store. Needed so Polaris can
+      # validate the catalog's allowed locations and vend credentials.
+      POLARIS_STORAGE_S3_ENDPOINT: ${S3_ENDPOINT:-http://objectstore:3900}
+      # AWS SDK v2 (2.30+) adds streaming CRC checksums to every upload by
+      # default. Garage rejects those with "Invalid payload signature", so only
+      # send checksums when an operation strictly requires them.
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    volumes:
+      - ./config/polaris/entrypoint.sh:/opt/polaris-config/entrypoint.sh:ro
+      - garage-creds:/creds:ro
+    networks:
+      - iceberg-network
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8181"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  # One-shot container that creates the `polaris` realm and its root principal.
+  # The Polaris server does NOT do this on startup -- an unbootstrapped realm has
+  # no credentials, and nothing can authenticate against it.
+  polaris-bootstrap:
+    image: apache/polaris-admin-tool:${POLARIS_VERSION:-1.8.0}
+    container_name: iceberg-polaris-bootstrap
+    depends_on:
+      postgres:
+        condition: service_healthy
+      objectstore-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      POLARIS_PERSISTENCE_TYPE: relational-jdbc
+      QUARKUS_DATASOURCE_USERNAME: polaris
+      QUARKUS_DATASOURCE_PASSWORD: polaris
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/polaris
+      QUARKUS_DATASOURCE_JDBC_ADDITIONAL_JDBC_PROPERTIES_CURRENTSCHEMA: polaris_schema
+      POLARIS_URL: ${POLARIS_URL:-http://polaris:8181}
+      POLARIS_REALM: ${POLARIS_REALM:-POLARIS}
+      POLARIS_CLIENT_ID: ${POLARIS_CLIENT_ID:-root}
+      POLARIS_CLIENT_SECRET: ${POLARIS_CLIENT_SECRET:-root}
+      POLARIS_CATALOG: ${POLARIS_CATALOG:-lakehouse}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://objectstore:3900}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-warehouse}
+    entrypoint: ["/bin/bash", "/bootstrap.sh"]
+    volumes:
+      - ./config/polaris/bootstrap.sh:/bootstrap.sh:ro
+    networks:
+      - iceberg-network
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Layer 3a: interactive query engine
+  # ---------------------------------------------------------------------------
+  trino:
+    image: ${TRINO_IMAGE:-trinodb/trino:477}
+    container_name: iceberg-trino
+    depends_on:
+      polaris:
+        condition: service_started
+      polaris-bootstrap:
+        condition: service_completed_successfully
+      objectstore-bootstrap:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "/opt/trino-config/entrypoint.sh"]
+    environment:
+      POLARIS_URI: ${POLARIS_URI:-http://polaris:8181/api/catalog}
+      POLARIS_TOKEN_URI: ${POLARIS_TOKEN_URI:-http://polaris:8181/api/catalog/v1/oauth/tokens}
+      POLARIS_CREDENTIAL: ${POLARIS_CLIENT_ID:-root}:${POLARIS_CLIENT_SECRET:-root}
+      # Name of the catalog to use inside Polaris. Must match a catalog that
+      # actually exists -- see the polaris-bootstrap service.
+      POLARIS_CATALOG: ${POLARIS_CATALOG:-lakehouse}
+      # Must match the realm bootstrapped by the polaris-bootstrap service.
+      POLARIS_REALM: ${POLARIS_REALM:-POLARIS}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://objectstore:3900}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      # Referenced by the image's stock config.properties.
+      CATALOG_MANAGEMENT: dynamic
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/trino/entrypoint.sh:/opt/trino-config/entrypoint.sh:ro
+      - ./config/trino/catalog/iceberg.properties.template:/opt/trino-config/iceberg.properties.template:ro
+      - garage-creds:/creds:ro
+    networks:
+      - iceberg-network
+
+  # ---------------------------------------------------------------------------
+  # Layer 3b: batch compute + the notebook environment students actually use
+  # ---------------------------------------------------------------------------
+  jupyter:
+    build:
+      context: ./config/jupyter
+      dockerfile: Dockerfile
+    image: iceberg-jupyter:local
+    container_name: iceberg-jupyter
+    depends_on:
+      polaris:
+        condition: service_started
+      polaris-bootstrap:
+        condition: service_completed_successfully
+      objectstore-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      POLARIS_URI: ${POLARIS_URI:-http://polaris:8181/api/catalog}
+      POLARIS_CREDENTIAL: ${POLARIS_CLIENT_ID:-root}:${POLARIS_CLIENT_SECRET:-root}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://objectstore:3900}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-warehouse}
+      GARAGE_CREDS_FILE: /creds/garage-credentials.env
+      # AWS SDK v2 (2.30+) adds streaming CRC checksums to every upload by
+      # default. Garage rejects those with "Invalid payload signature", so only
+      # send checksums when an operation strictly requires them.
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    ports:
+      - "8888:8888"   # JupyterLab
+      - "4040:4040"   # Spark UI (only while a SparkSession is running)
+    volumes:
+      - ./notebooks:/home/jovyan/notebooks
+      - garage-creds:/creds:ro
+    networks:
+      - iceberg-network
