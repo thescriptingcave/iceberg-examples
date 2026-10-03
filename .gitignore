@@ -4,6 +4,11 @@
 # Jupyter
 .ipynb_checkpoints/
 
+# Your own notebooks and scratch files. The directory is bind-mounted into the
+# JupyterLab container and kept on your machine, so there is no reason to track
+# it -- and notebooks carry cell output, which may include tokens.
+notebooks/
+
 # Python
 __pycache__/
 
