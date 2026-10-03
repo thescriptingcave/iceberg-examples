@@ -86,7 +86,7 @@ iceberg-hands-on/
 1. **Get the project and go into it:**
 ```bash
 git clone git@github.com:thescriptingcave/iceberg-polaris-trino-spark-.git
-cd iceberg-hands-on
+cd iceberg-examples
 ```
 
 2. **Start all services and wait until they are ready:**

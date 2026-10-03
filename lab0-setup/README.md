@@ -33,7 +33,7 @@ If you have not cloned it yet:
 
 ```bash
 git clone git@github.com:thescriptingcave/iceberg-polaris-trino-spark-.git
-cd iceberg-hands-on
+cd iceberg-examples
 ```
 
 ### Step 2: Start all services
