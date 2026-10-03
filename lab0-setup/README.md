@@ -200,7 +200,7 @@ The script is safe to run more than once: tables are created with `IF NOT EXISTS
 docker exec iceberg-trino trino --execute "SELECT * FROM iceberg.tutorial.orders"
 ```
 
-Lab 1 creates and fills `customers` itself. If you ran `spark-init.sql` first, the table already holds three rows, so Lab 1's inserts will produce duplicates. Drop it before starting Lab 1 (`DROP TABLE lakehouse.tutorial.customers PURGE` in Spark) if you want your row counts to match the lab.
+Both this script and Lab 1's seed step use `INSERT OVERWRITE`, so the two do not collide: whichever runs last replaces the rows rather than appending a second copy. You can run them in any order, repeatedly, and `customers` always holds three rows. That is why `INSERT OVERWRITE` and not `INSERT INTO` -- Iceberg has no primary keys, so a plain append would give you six rows with duplicate `customer_id`s.
 
 ---
 

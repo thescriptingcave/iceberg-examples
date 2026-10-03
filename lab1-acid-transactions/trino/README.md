@@ -121,16 +121,19 @@ this is a no-op if it exists:
 CREATE SCHEMA IF NOT EXISTS iceberg.tutorial;
 ```
 
-> **Already ran Lab 0?** Its init script creates `tutorial.customers` with the
-> same three rows. Check with `SHOW TABLES;` -- if `customers` is listed, skip
-> Steps 3 and 5 (the only visible difference is that `created_at` shows as
-> `timestamp(6) with time zone`, because Spark's `TIMESTAMP` is zone-aware).
+> **Already ran Lab 0?** No problem: its init script seeds the same three rows,
+> and Step 5 clears the table before inserting, so you still end up with three
+> rows. Run both steps in any order, as often as you like. (The one visible
+> difference is that `created_at` shows as `timestamp(6) with time zone` when
+> Spark created the table, because Spark's `TIMESTAMP` is zone-aware -- Trino's
+> `TIMESTAMP(6)` is not zone-aware, and `CREATE TABLE IF NOT EXISTS` will not
+> change an existing table's type.)
 
 ### Step 3: Create an Iceberg Table
 
 ```sql
 -- Create an Iceberg table
-CREATE TABLE tutorial.customers (
+CREATE TABLE IF NOT EXISTS tutorial.customers (
     customer_id INTEGER,
     name VARCHAR(100),
     email VARCHAR(100),
@@ -178,6 +181,10 @@ string type, so the `(100)` is not stored.
 ### Step 5: Insert Initial Data
 
 ```sql
+-- Clear the table first, so re-running this step is safe.
+-- Trino has no INSERT OVERWRITE, so this is the equivalent.
+DELETE FROM tutorial.customers;
+
 -- Insert data
 INSERT INTO tutorial.customers (customer_id, name, email, created_at)
 VALUES
@@ -197,6 +204,16 @@ You should see:
          3
 (1 row)
 ```
+
+> **Why the `DELETE` first?** Trino does not support `INSERT OVERWRITE` --
+> only Spark does. The pair `DELETE` + `INSERT INTO` has the same effect:
+> the table ends up holding exactly these three rows, so you can re-run this
+> step as often as you like. Without the `DELETE`, a plain `INSERT INTO`
+> would append a second copy, because Iceberg has no primary keys to stop it.
+
+The `DELETE` commits its own snapshot before the insert does, so this step
+produces two snapshots rather than one. That is harmless here, but it is why
+Spark's Step 4 uses a single `INSERT OVERWRITE` instead.
 
 ### Step 6: Query the Data
 

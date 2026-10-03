@@ -54,7 +54,7 @@ This lab covers **ACID Transactions** in Apache Iceberg through three different 
 spark.sql("CREATE TABLE lakehouse.tutorial.customers (...) USING ICEBERG")
 
 # Insert data
-spark.sql("INSERT INTO lakehouse.tutorial.customers VALUES (...)")
+spark.sql("INSERT OVERWRITE lakehouse.tutorial.customers VALUES (...)")
 
 # Update data
 spark.sql("UPDATE lakehouse.tutorial.customers SET ... WHERE ...")
@@ -83,7 +83,9 @@ See [`common/connection-reference.md`](../common/connection-reference.md) for th
 -- Create table
 CREATE TABLE iceberg.tutorial.customers (...) WITH (partitioning = ARRAY['column']);
 
--- Insert data
+-- Insert data. Trino has no INSERT OVERWRITE (Spark does), so clear the
+-- table first if you want the step to be safe to re-run.
+DELETE FROM iceberg.tutorial.customers;
 INSERT INTO iceberg.tutorial.customers VALUES (...);
 
 -- Update data

@@ -222,11 +222,15 @@ spark = (
 The lab uses the `tutorial` namespace, created in Lab 0. If it is missing, run
 `spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.tutorial")`.
 
-> **Already ran `spark-init.sql` in Lab 0?** It creates `tutorial.customers`
-> with the same three rows, so Step 4 would insert them a second time (Iceberg
-> has no primary keys to stop it). Check with
-> `spark.sql("SHOW TABLES IN lakehouse.tutorial").show()` -- if `customers` is
-> listed, skip Steps 2 and 4.
+> **Already ran `spark-init.sql` in Lab 0?** No problem: it seeds the same three
+> rows, and Step 4's `INSERT OVERWRITE` replaces them rather than appending, so
+> you still end up with three rows. Run both steps in any order, as often as
+> you like.
+>
+> The rest of the lab uses plain `INSERT INTO` on purpose -- Step 4's job is to
+> establish a known starting point, and the later steps are about what happens
+> when writes add, update and delete rows. Only the seed step needs to be
+> repeatable.
 
 ### Step 2: Create an Iceberg Table
 
@@ -267,7 +271,7 @@ spark.sql("DESCRIBE lakehouse.tutorial.customers").show()
 ```python
 # Insert sample data
 spark.sql("""
-INSERT INTO lakehouse.tutorial.customers VALUES
+INSERT OVERWRITE lakehouse.tutorial.customers VALUES
     (1, 'Alice Smith', 'alice@example.com', TIMESTAMP '2024-01-01 10:00:00'),
     (2, 'Bob Johnson', 'bob@example.com', TIMESTAMP '2024-01-02 11:00:00'),
     (3, 'Charlie Brown', 'charlie@example.com', TIMESTAMP '2024-01-03 12:00:00')
@@ -275,6 +279,11 @@ INSERT INTO lakehouse.tutorial.customers VALUES
 
 print("✅ Initial data inserted!")
 ```
+
+`INSERT OVERWRITE` replaces the table's contents, so re-running Step 4 leaves
+the same three rows instead of appending a second copy. Iceberg has no primary
+keys, so a plain `INSERT INTO` would happily give you six rows with duplicate
+`customer_id`s on the second run.
 
 > **Why `TIMESTAMP '...'`?** Iceberg tables use strict (ANSI) store assignment,
 > so a plain string like `'2024-01-01 10:00:00'` is rejected with
