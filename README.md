@@ -85,7 +85,7 @@ iceberg-hands-on/
 
 1. **Get the project and go into it:**
 ```bash
-git clone https://github.com/thescriptingcave/iceberg-hands-on.git
+git clone git@github.com:thescriptingcave/iceberg-polaris-trino-spark-.git
 cd iceberg-hands-on
 ```
 

@@ -32,7 +32,7 @@ Related files elsewhere in the repo:
 If you have not cloned it yet:
 
 ```bash
-git clone https://github.com/thescriptingcave/iceberg-hands-on.git
+git clone git@github.com:thescriptingcave/iceberg-polaris-trino-spark-.git
 cd iceberg-hands-on
 ```
 
