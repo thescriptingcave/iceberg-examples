@@ -188,8 +188,14 @@ Lab 1 creates and fills `customers` itself. If you ran `spark-init.sql` first, t
 lsof -i :8080
 
 # Stop the conflicting service, then start again
-docker compose up -d
+./lab0-setup/startup.sh
 ```
+
+For JupyterLab you can instead move the tutorial to another port: copy
+`.env.example` to `.env`, set `JUPYTER_PORT=8889`, and rerun `startup.sh`.
+`startup.sh` checks this port before starting, because a second JupyterLab on
+port 8888 does not make Docker fail on macOS -- your browser just silently
+reaches the wrong server.
 
 ### Issue 2: Services start but crash
 

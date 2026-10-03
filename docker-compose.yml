@@ -225,6 +225,10 @@ services:
       dockerfile: Dockerfile
     image: iceberg-jupyter:local
     container_name: iceberg-jupyter
+    # Open JupyterLab inside the mounted notebooks/ folder rather than the home
+    # directory. Only notebooks/ is saved to the host; anything stored elsewhere
+    # in the container is lost when the container is recreated.
+    command: ["start-notebook.py", "--ServerApp.root_dir=/home/jovyan/notebooks"]
     depends_on:
       polaris:
         condition: service_started
@@ -245,7 +249,9 @@ services:
       AWS_REQUEST_CHECKSUM_CALCULATION: when_required
       AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
     ports:
-      - "8888:8888"   # JupyterLab
+      # Host port is configurable: a JupyterLab already running on the host
+      # often holds 8888, and on macOS it then silently wins over this one.
+      - "${JUPYTER_PORT:-8888}:8888"   # JupyterLab
       - "4040:4040"   # Spark UI (only while a SparkSession is running)
     volumes:
       - ./notebooks:/home/jovyan/notebooks

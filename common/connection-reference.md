@@ -22,7 +22,7 @@ So the same table is `lakehouse.tutorial.customers` in Spark and
 
 | Service | From your laptop | From inside the containers | Login |
 |---|---|---|---|
-| JupyterLab (Spark) | http://localhost:8888 | -- | token, see below |
+| JupyterLab (Spark) | http://localhost:8888 (or `JUPYTER_PORT` from `.env`) | -- | token, see below |
 | Spark UI | http://localhost:4040 | -- | only while a `SparkSession` is running |
 | Trino web UI | http://localhost:8080 | `http://trino:8080` | any user name, no password |
 | Polaris Iceberg REST API | http://localhost:8181/api/catalog | `http://polaris:8181/api/catalog` | OAuth2, `root` / `root` |
@@ -31,6 +31,12 @@ So the same table is `lakehouse.tutorial.customers` in Spark and
 | PostgreSQL (Polaris metadata) | `localhost:5432` | `postgres:5432` | `polaris` / `polaris` |
 
 There is **no** web console for the object store and **no** Polaris admin UI.
+
+### JupyterLab files
+
+JupyterLab's file browser opens in the project's `notebooks/` folder, which is
+mounted from your machine -- every notebook you save there is kept. (The path
+inside the container is `/home/jovyan/notebooks`.)
 
 ### JupyterLab token
 

@@ -20,6 +20,12 @@ NC='\033[0m' # No Color
 # images and downloads several more, so allow plenty of time.
 TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-300}
 
+# Host port for JupyterLab: the environment wins, then .env, then 8888.
+if [ -z "$JUPYTER_PORT" ] && [ -f .env ]; then
+    JUPYTER_PORT=$(sed -n 's/^JUPYTER_PORT=//p' .env | tail -1)
+fi
+JUPYTER_PORT=${JUPYTER_PORT:-8888}
+
 echo ""
 echo "Checking prerequisites..."
 echo ""
@@ -41,6 +47,23 @@ if ! docker compose version &> /dev/null; then
 fi
 
 echo -e "${GREEN}✓ Docker Compose is installed${NC}"
+
+# Another JupyterLab on the host commonly holds the Jupyter port. On macOS
+# Docker does not fail in that case -- the browser just reaches the other
+# server and rejects this stack's token -- so catch it up front.
+if command -v lsof &> /dev/null; then
+    other=$(lsof -nP -iTCP:"$JUPYTER_PORT" -sTCP:LISTEN 2>/dev/null \
+        | awk 'NR > 1 && $1 !~ /^(com\.docke|docker|vpnkit)/ {print $1 " (pid " $2 ")"}' | sort -u)
+    if [ -n "$other" ]; then
+        echo -e "${RED}ERROR: port $JUPYTER_PORT is already used by: $other${NC}"
+        echo "  That is usually another JupyterLab. Either stop it, or give this"
+        echo "  tutorial a different port and run this script again:"
+        echo "    cp -n .env.example .env   # if you have no .env yet"
+        echo "    then set JUPYTER_PORT=8889 in .env"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Port $JUPYTER_PORT is free for JupyterLab${NC}"
+fi
 
 echo ""
 echo "Starting services..."
@@ -74,18 +97,21 @@ check_trino() {
     curl -s http://localhost:8080/v1/info | grep -q '"starting":false'
 }
 
-# JupyterLab: any HTTP response (it redirects to the login page).
+# JupyterLab: any HTTP response (it redirects to the login page), and the login
+# token has reached the log -- that line can land a moment after the port opens,
+# and the summary below needs it.
 check_jupyter() {
     local code
-    code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8888)
-    [ -n "$code" ] && [ "$code" != "000" ]
+    code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$JUPYTER_PORT")
+    [ -n "$code" ] && [ "$code" != "000" ] || return 1
+    docker logs iceberg-jupyter 2>&1 | grep -q 'token='
 }
 
 SERVICES="objectstore polaris trino jupyter"
 LABEL_objectstore="Object store (Garage, port 3900)"
 LABEL_polaris="Polaris (port 8181)"
 LABEL_trino="Trino (port 8080)"
-LABEL_jupyter="JupyterLab (port 8888)"
+LABEL_jupyter="JupyterLab (port $JUPYTER_PORT)"
 
 echo ""
 echo "Waiting for services to become ready (up to ${TIMEOUT_SECONDS}s)..."
@@ -133,7 +159,7 @@ echo "=============================================="
 echo "  Access Points                                "
 echo "=============================================="
 echo ""
-echo "  JupyterLab (Spark):    http://localhost:8888"
+echo "  JupyterLab (Spark):    http://localhost:$JUPYTER_PORT"
 echo "  Spark UI:              http://localhost:4040  (only while a SparkSession runs)"
 echo "  Trino web UI:          http://localhost:8080  (any user name, no password)"
 echo "  Polaris REST API:      http://localhost:8181/api/catalog  (OAuth2, root / root)"
@@ -141,10 +167,11 @@ echo "  Garage S3 API:         http://localhost:3900"
 echo ""
 echo "  There is no object-store web console and no Polaris admin UI."
 echo ""
-echo "  JupyterLab token:"
-token_line=$(docker logs iceberg-jupyter 2>&1 | grep 'token=' | tail -1)
-if [ -n "$token_line" ]; then
-    echo "    ${token_line#"${token_line%%[![:space:]]*}"}"
+echo "  JupyterLab login URL:"
+token=$(docker logs iceberg-jupyter 2>&1 | grep -o 'token=[0-9a-f]*' | tail -1)
+if [ -n "$token" ]; then
+    # Jupyter logs its in-container address (port 8888); print the host one.
+    echo "    http://localhost:$JUPYTER_PORT/lab?$token"
 else
     echo "    (not found yet) run: docker logs iceberg-jupyter 2>&1 | grep 'token=' | tail -1"
 fi

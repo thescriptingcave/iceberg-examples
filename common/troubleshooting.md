@@ -337,7 +337,19 @@ docker logs iceberg-jupyter 2>&1 | grep 'token=' | tail -1
 ```
 Open the URL it prints (replace `127.0.0.1` with `localhost` if needed), or
 paste the part after `token=` into the login page. The token changes every
-time the container is re-created.
+time the container restarts; `./lab0-setup/startup.sh` always prints the
+current login URL.
+
+**The token is rejected even though it is current?** Another JupyterLab on
+your machine is probably holding port 8888, and on macOS the browser reaches
+*that* server instead of this one -- Docker reports no error. `startup.sh`
+checks for this and stops with `ERROR: port 8888 is already used by: ...`.
+Stop the other Jupyter, or move this one to another port:
+```bash
+cp -n .env.example .env        # if you have no .env yet
+# then set JUPYTER_PORT=8889 in .env, and:
+./lab0-setup/startup.sh        # now at http://localhost:8889
+```
 
 ### Issue 11: `No module named 'pyspark'`
 
