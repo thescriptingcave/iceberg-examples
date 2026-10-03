@@ -83,23 +83,18 @@ iceberg-examples/
 
 ### Quick Start (5 minutes)
 
-1. **Clone or navigate to the project:**
+1. **Go to the project directory** (wherever you cloned or unpacked it):
 ```bash
-cd /Users/dev/Developer/iceberg-examples
+cd iceberg-examples
 ```
 
-2. **Start all services:**
-```bash
-docker compose up -d
-```
-
-3. **Wait for services to be ready:**
+2. **Start all services and wait until they are ready:**
 ```bash
 ./lab0-setup/startup.sh
 ```
-This polls each service until it answers (the very first start builds two images and can take several minutes), then prints the access points and your JupyterLab token.
+This runs `docker compose up -d` for you, polls each service until it answers (the very first start builds two images and can take several minutes), then prints the access points and your JupyterLab token. There is no need to run `docker compose up` first.
 
-4. **Verify services are running:**
+3. **Verify services are running:**
 ```bash
 docker compose ps
 ```
@@ -115,7 +110,7 @@ iceberg-trino         trino         Up (healthy)
 ```
 Two one-shot containers, `iceberg-objectstore-bootstrap` and `iceberg-polaris-bootstrap`, set things up and exit; `docker compose ps -a` should show them as `Exited (0)`.
 
-5. **Access the services:**
+4. **Access the services:**
 - **JupyterLab (Spark)**: http://localhost:8888 (token: `docker logs iceberg-jupyter 2>&1 | grep 'token=' | tail -1`)
 - **Trino**: http://localhost:8080 (any user name, no password)
 - **Polaris REST API**: http://localhost:8181/api/catalog (OAuth2 client credentials `root` / `root`)
@@ -124,7 +119,7 @@ Two one-shot containers, `iceberg-objectstore-bootstrap` and `iceberg-polaris-bo
 
 There is no object-store web console and no Polaris admin UI. Everything you need to connect -- catalog and namespace names, credentials, and the `SparkSession` snippet used in every lab -- is in the **[Connection Reference](common/connection-reference.md)**.
 
-6. **Create the `tutorial` namespace** the labs use: see "Initialize the tutorial namespace" in [Lab 0](lab0-setup/README.md).
+5. **Create the `tutorial` namespace** the labs use: see "Initialize the tutorial namespace" in [Lab 0](lab0-setup/README.md).
 
 In Spark, tables are named `lakehouse.tutorial.<table>`; in Trino the same tables are `iceberg.tutorial.<table>`.
 

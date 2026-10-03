@@ -29,8 +29,10 @@ Related files elsewhere in the repo:
 
 ### Step 1: Navigate to the project directory
 
+Wherever you cloned or unpacked it:
+
 ```bash
-cd /Users/dev/Developer/iceberg-examples
+cd iceberg-examples
 ```
 
 ### Step 2: Start all services
@@ -39,7 +41,7 @@ cd /Users/dev/Developer/iceberg-examples
 ./lab0-setup/startup.sh
 ```
 
-This runs `docker compose up -d`, then polls each service until it is ready (up to 5 minutes; the very first start also builds two images, so it can take a while). You can also just run `docker compose up -d` yourself.
+This runs `docker compose up -d`, then polls each service until it is ready (up to 5 minutes; the very first start also builds two images, so it can take a while). There is no need to run `docker compose up -d` first; if you already did, the script simply waits for the services.
 
 ### Step 3: Verify everything is running
 
